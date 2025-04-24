@@ -5,7 +5,7 @@ services:
     build: .
     container_name: calorie_bot
     environment:
-      - BOT_TOKEN=7976823390:AAFleiifE8dDe7a3HgaKFQj-XOu2uxPXGgo
+      - BOT_TOKEN=${BOT_TOKEN}
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/calorie_db
     depends_on:
       - db

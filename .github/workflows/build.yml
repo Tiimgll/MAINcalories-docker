@@ -25,8 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - run: ls -la
-      - run: cat compose.yml
-      - name: Copy compose.yml to server
+      - run: cat compose.yaml
+      - name: Copy compose.yaml to server
         uses: appleboy/scp-action@v0.1.6
         with:
           host: ${{ secrets.SERVER_HOST }}

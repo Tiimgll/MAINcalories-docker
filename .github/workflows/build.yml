@@ -46,6 +46,6 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             echo "BOT_TOKEN='${{ secrets.BOT_TOKEN }}'" > ${{ secrets.SERVER_DIR }}/.env
-            docker-compose -f ${{ secrets.SERVER_DIR }}/compose.yml pull
-            docker-compose -f ${{ secrets.SERVER_DIR }}/compose.yml down
-            docker-compose -f ${{ secrets.SERVER_DIR }}/compose.yml up -d
+            docker-compose -f ${{ secrets.SERVER_DIR }}/compose.yaml pull
+            docker-compose -f ${{ secrets.SERVER_DIR }}/compose.yaml down
+            docker-compose -f ${{ secrets.SERVER_DIR }}/compose.yaml up -d

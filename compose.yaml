@@ -2,7 +2,6 @@ version: '3.8'
 
 services:
   calorie_bot:
-    build: .
     image: ghcr.io/tiimgll/maincalories-docker:latest
     container_name: calorie_bot
     environment:

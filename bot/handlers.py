@@ -4,7 +4,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import select
 from db import async_session
-from models import User
+from models import User, Product, FoodEntry
+from datetime import datetime, timedelta
+from aiogram.filters import CommandObject
 
 router = Router()
 
@@ -19,7 +21,11 @@ class ProductStates(StatesGroup):
     cal_per_100g = State()
     weight_g = State()
 
-# 📌 Регистрация пользователя
+class AddFoodStates(StatesGroup):
+    calories = State()
+    description = State()
+
+# 📌 Регистрация
 @router.message(Command("start"))
 async def start_registration(message: types.Message, state: FSMContext):
     async with async_session() as session:
@@ -27,15 +33,15 @@ async def start_registration(message: types.Message, state: FSMContext):
         user = result.scalar_one_or_none()
 
         if user:
-            await message.answer("👋 Вы уже зарегистрированы. Используйте /my_calories или /calc_product.")
+            await message.answer("👋 Вы уже зарегистрированы. Используйте /info")
         else:
-            await message.answer("Добро пожаловать! Укажите ваш пол (M/F):")
+            await message.answer("Добро пожаловать! Укажите ваш пол (М/Ж):")
             await state.set_state(Registration.gender)
 
 @router.message(Registration.gender)
 async def process_gender_reg(message: types.Message, state: FSMContext):
-    if message.text.upper() not in ["M", "F"]:
-        await message.answer("Введите M или F.")
+    if message.text.upper() not in ["М", "Ж"]:
+        await message.answer("Введите М или Ж.")
         return
     await state.update_data(gender=message.text.upper())
     await message.answer("Введите ваш возраст:")
@@ -69,11 +75,25 @@ async def process_height_reg(message: types.Message, state: FSMContext):
         session.add(new_user)
         await session.commit()
 
-    await message.answer("✅ Регистрация завершена! Используйте /my_calories и /calc_product.")
+    await message.answer("✅ Регистрация завершена! Используйте /info.")
     await state.clear()
 
-# 📌 Получение дневной нормы калорий из БД
-@router.message(Command("my_calories"))
+@router.message(Command("info"))
+async def info_command(message: types.Message):
+    text = (
+        "📋 *Описание команд бота:*\n\n"
+        "/info — Показать это описание всех доступных команд.\n\n"
+        "/add — Добавить запись о съеденной еде с калориями и описанием.\n\n"
+        "/today — Показать список съеденного сегодня.\n\n"
+        "/mycalories — Показать твою дневную норму калорий.\n\n"
+        "/calcproduct — Калькулятор калорийности продукта по весу.\n\n"
+        "/product — Показать список продуктов с калорийностью.\n\n"
+        "/me — Показать информацию о тебе (пол, возраст, вес, рост)."
+    )
+    await message.answer(text, parse_mode="Markdown")
+
+# 📌 Получение калорийности
+@router.message(Command("mycalories"))
 async def get_calories(message: types.Message):
     async with async_session() as session:
         result = await session.execute(select(User).where(User.id_telegram == message.from_user.id))
@@ -93,7 +113,99 @@ async def get_calories(message: types.Message):
 
         await message.answer(f"🔥 Ваша дневная норма калорий: {round(bmr)} ккал")
 
-# 📌 Вывод параметров пользователя
+# 📌 Калькулятор продукта
+@router.message(Command("calcproduct"))
+async def start_product_calc(message: types.Message, state: FSMContext):
+    await message.answer("Введите калорийность на 100 г продукта:")
+    await state.set_state(ProductStates.cal_per_100g)
+
+@router.message(ProductStates.cal_per_100g)
+async def process_cal_per_100g(message: types.Message, state: FSMContext):
+    await state.update_data(cal_per_100g=float(message.text))
+    await message.answer("Введите вес продукта в граммах:")
+    await state.set_state(ProductStates.weight_g)
+
+@router.message(ProductStates.weight_g)
+async def process_weight_g(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    cal_per_100g = data["cal_per_100g"]
+    weight_g = float(message.text)
+    calories = (cal_per_100g / 100) * weight_g
+    await message.answer(f"🥗 Энергетическая ценность порции: {round(calories, 2)} ккал")
+    await state.clear()
+
+# 📌 Список продуктов
+@router.message(Command("product"))
+async def list_products(message: types.Message):
+    async with async_session() as session:
+        result = await session.execute(select(Product))
+        products = result.scalars().all()
+
+        if not products:
+            await message.answer("Пока продуктов нет.")
+            return
+
+        text = "📋 Продукты на 100 г:\n"
+        for p in products:
+            text += f"- {p.name} — {p.cal_per_100g} ккал\n"
+
+        await message.answer(text)
+
+# 📌 Добавление еды
+@router.message(Command("add"))
+async def add_food_entry(message: types.Message, state: FSMContext):
+    await message.answer("Сколько калорий?")
+    await state.set_state(AddFoodStates.calories)
+
+@router.message(AddFoodStates.calories)
+async def add_food_calories(message: types.Message, state: FSMContext):
+    await state.update_data(calories=float(message.text))
+    await message.answer("Что именно ели?")
+    await state.set_state(AddFoodStates.description)
+
+@router.message(AddFoodStates.description)
+async def add_food_description(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+
+    async with async_session() as session:
+        entry = FoodEntry(
+            user_id=message.from_user.id,
+            calories=data["calories"],
+            description=message.text,
+            created_at=datetime.utcnow()
+        )
+        session.add(entry)
+        await session.commit()
+
+    await message.answer("✅ Записано!")
+    await state.clear()
+
+# 📌 Показать что съедено сегодня
+@router.message(Command("today"))
+async def show_today_entries(message: types.Message):
+    now = datetime.utcnow()
+    start_of_day = datetime(now.year, now.month, now.day)
+
+    async with async_session() as session:
+        result = await session.execute(
+            select(FoodEntry).where(
+                FoodEntry.user_id == message.from_user.id,
+                FoodEntry.created_at >= start_of_day
+            )
+        )
+        entries = result.scalars().all()
+
+        if not entries:
+            await message.answer("Сегодня пока ничего не ели.")
+            return
+
+        text = "🍽️ Сегодня ты ел:\n"
+        for i, e in enumerate(entries, 1):
+            text += f"{i}) {e.calories} ккал — {e.description}\n"
+
+        await message.answer(text)
+
+# 📌 Показать параметры
 @router.message(Command("me"))
 async def get_me(message: types.Message):
     async with async_session() as session:
@@ -111,25 +223,3 @@ async def get_me(message: types.Message):
             f"Вес: {user.weight} кг\n"
             f"Рост: {user.height} см"
         )
-
-# 📌 Калькулятор калорийности продукта
-@router.message(Command("calc_product"))
-async def start_product_calc(message: types.Message, state: FSMContext):
-    await message.answer("Введите калорийность на 100 г продукта:")
-    await state.set_state(ProductStates.cal_per_100g)
-
-@router.message(ProductStates.cal_per_100g)
-async def process_cal_per_100g(message: types.Message, state: FSMContext):
-    await state.update_data(cal_per_100g=float(message.text))
-    await message.answer("Введите вес продукта в граммах:")
-    await state.set_state(ProductStates.weight_g)
-
-@router.message(ProductStates.weight_g)
-async def process_weight_g(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    cal_per_100g = data["cal_per_100g"]
-    weight_g = float(message.text)
-
-    calories = (cal_per_100g / 100) * weight_g
-    await message.answer(f"🥗 Энергетическая ценность порции: {round(calories, 2)} ккал")
-    await state.clear()

@@ -14,7 +14,8 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_PAT }}
+
       - run: docker build -t ghcr.io/tiimgll/maincalories-docker:latest .
       - run: docker push ghcr.io/tiimgll/maincalories-docker:latest
 

@@ -46,6 +46,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             echo "BOT_TOKEN='${{ secrets.BOT_TOKEN }}'" > ${{ secrets.SERVER_DIR }}/.env
+            echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker-compose -f ${{ secrets.SERVER_DIR }}/compose.yaml pull
             docker-compose -f ${{ secrets.SERVER_DIR }}/compose.yaml down
             docker-compose -f ${{ secrets.SERVER_DIR }}/compose.yaml up -d

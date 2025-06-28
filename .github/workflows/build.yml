@@ -24,6 +24,8 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v3
+      - run: ls -la
+      - run: cat compose.yml
       - name: Copy compose.yml to server
         uses: appleboy/scp-action@v0.1.6
         with:
